@@ -1014,6 +1014,39 @@ func (check *Checker) rawExpr(x *operand, e ast.Expr, hint Type) exprKind {
 	return kind
 }
 
+func (check *Checker) ifStmt(ctxt stmtContext, s *ast.IfStmt, x *operand) {
+	inner := ctxt &^ (fallthroughOk | finalSwitchCase)
+
+	check.openScope(s, "if")
+	defer check.closeScope()
+
+	check.simpleStmt(s.Init)
+	var cond operand
+	check.expr(&cond, s.Cond)
+	if cond.mode != invalid && !isBoolean(cond.typ) {
+		check.error(s.Cond.Pos(), "non-boolean condition in if statement")
+	}
+	check.stmt(inner, s.Body)
+	// The parser produces a correct AST but if it was modified
+	// elsewhere the else branch may be invalid. Check again.
+	switch elseClause := s.Else.(type) {
+	case nil, *ast.BadStmt:
+		// valid or error already reported
+	case *ast.BlockStmt:
+		check.stmt(inner, elseClause)
+	case *ast.ExprStmt:
+		if _, ok := elseClause.X.(*ast.IfStmt); ok {
+			check.stmt(inner, elseClause)
+		} else {
+			check.error(elseClause.Pos(), "invalid else branch in if statement")
+		}
+	default:
+		check.error(elseClause.Pos(), "invalid else branch in if statement")
+	}
+
+	// TODO: check thenClause and elseClause types
+}
+
 // exprInternal contains the core of type checking of expressions.
 // Must only be called by rawExpr.
 //

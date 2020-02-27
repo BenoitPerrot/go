@@ -569,3 +569,23 @@ type x int // comment
 		t.Errorf("got %q, want %q", comment, "// comment")
 	}
 }
+
+func TestIfExpr(t *testing.T) {
+	_, err := ParseFile(token.NewFileSet(), "", `
+package p
+
+func foo() {
+	i :=
+		if true {
+			1
+		} else {
+			0
+		}
+
+	j := i + 1
+}
+`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

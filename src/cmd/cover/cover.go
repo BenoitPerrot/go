@@ -254,13 +254,15 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 		// we inserted above.
 		pos := f.fset.File(n.Body.End()).Pos(elseOffset + 4)
 		switch stmt := n.Else.(type) {
-		case *ast.IfStmt:
-			block := &ast.BlockStmt{
-				Lbrace: pos,
-				List:   []ast.Stmt{stmt},
-				Rbrace: stmt.End(),
+		case *ast.ExprStmt:
+			if _, ok := stmt.X.(*ast.IfStmt); ok {
+				block := &ast.BlockStmt{
+					Lbrace: pos,
+					List:   []ast.Stmt{stmt},
+					Rbrace: stmt.End(),
+				}
+				n.Else = block
 			}
-			n.Else = block
 		case *ast.BlockStmt:
 			stmt.Lbrace = pos
 		default:
@@ -466,16 +468,19 @@ func (f *File) statementBoundary(s ast.Stmt) token.Pos {
 	case *ast.BlockStmt:
 		// Treat blocks like basic blocks to avoid overlapping counters.
 		return s.Lbrace
-	case *ast.IfStmt:
-		found, pos := hasFuncLiteral(s.Init)
-		if found {
-			return pos
+	case *ast.ExprStmt:
+		switch e := s.X.(type) {
+		case *ast.IfStmt:
+			found, pos := hasFuncLiteral(e.Init)
+			if found {
+				return pos
+			}
+			found, pos = hasFuncLiteral(e.Cond)
+			if found {
+				return pos
+			}
+			return e.Body.Lbrace
 		}
-		found, pos = hasFuncLiteral(s.Cond)
-		if found {
-			return pos
-		}
-		return s.Body.Lbrace
 	case *ast.ForStmt:
 		found, pos := hasFuncLiteral(s.Init)
 		if found {
@@ -540,8 +545,6 @@ func (f *File) endsBasicSourceBlock(s ast.Stmt) bool {
 		return true
 	case *ast.ForStmt:
 		return true
-	case *ast.IfStmt:
-		return true
 	case *ast.LabeledStmt:
 		return true // A goto may branch here, starting a new basic block.
 	case *ast.RangeStmt:
@@ -553,12 +556,15 @@ func (f *File) endsBasicSourceBlock(s ast.Stmt) bool {
 	case *ast.TypeSwitchStmt:
 		return true
 	case *ast.ExprStmt:
-		// Calls to panic change the flow.
-		// We really should verify that "panic" is the predefined function,
-		// but without type checking we can't and the likelihood of it being
-		// an actual problem is vanishingly small.
-		if call, ok := s.X.(*ast.CallExpr); ok {
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "panic" && len(call.Args) == 1 {
+		switch e := s.X.(type) {
+		case *ast.IfStmt:
+			return true
+		case *ast.CallExpr:
+			// Calls to panic change the flow.
+			// We really should verify that "panic" is the predefined function,
+			// but without type checking we can't and the likelihood of it being
+			// an actual problem is vanishingly small.
+			if ident, ok := e.Fun.(*ast.Ident); ok && ident.Name == "panic" && len(e.Args) == 1 {
 				return true
 			}
 		}

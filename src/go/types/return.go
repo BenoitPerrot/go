@@ -28,9 +28,18 @@ func (check *Checker) isTerminating(s ast.Stmt, label string) bool {
 		return check.isTerminating(s.Stmt, s.Label.Name)
 
 	case *ast.ExprStmt:
-		// calling the predeclared (possibly parenthesized) panic() function is terminating
-		if call, ok := unparen(s.X).(*ast.CallExpr); ok && check.isPanic[call] {
-			return true
+		switch x := s.X.(type) {
+		case *ast.IfStmt:
+			if x.Else != nil &&
+				check.isTerminating(x.Body, "") &&
+				check.isTerminating(x.Else, "") {
+				return true
+			}
+		default:
+			// calling the predeclared (possibly parenthesized) panic() function is terminating
+			if call, ok := unparen(s.X).(*ast.CallExpr); ok && check.isPanic[call] {
+				return true
+			}
 		}
 
 	case *ast.ReturnStmt:
@@ -43,13 +52,6 @@ func (check *Checker) isTerminating(s ast.Stmt, label string) bool {
 
 	case *ast.BlockStmt:
 		return check.isTerminatingList(s.List, "")
-
-	case *ast.IfStmt:
-		if s.Else != nil &&
-			check.isTerminating(s.Body, "") &&
-			check.isTerminating(s.Else, "") {
-			return true
-		}
 
 	case *ast.SwitchStmt:
 		return check.isTerminatingSwitch(s.Body, label)
@@ -112,7 +114,7 @@ func hasBreak(s ast.Stmt, label string, implicit bool) bool {
 	default:
 		unreachable()
 
-	case *ast.BadStmt, *ast.DeclStmt, *ast.EmptyStmt, *ast.ExprStmt,
+	case *ast.BadStmt, *ast.DeclStmt, *ast.EmptyStmt,
 		*ast.SendStmt, *ast.IncDecStmt, *ast.AssignStmt, *ast.GoStmt,
 		*ast.DeferStmt, *ast.ReturnStmt:
 		// no chance
@@ -133,10 +135,13 @@ func hasBreak(s ast.Stmt, label string, implicit bool) bool {
 	case *ast.BlockStmt:
 		return hasBreakList(s.List, label, implicit)
 
-	case *ast.IfStmt:
-		if hasBreak(s.Body, label, implicit) ||
-			s.Else != nil && hasBreak(s.Else, label, implicit) {
-			return true
+	case *ast.ExprStmt:
+		switch x := s.X.(type) {
+		case *ast.IfStmt:
+			if hasBreak(x.Body, label, implicit) ||
+				x.Else != nil && hasBreak(x.Else, label, implicit) {
+				return true
+			}
 		}
 
 	case *ast.CaseClause:

@@ -231,10 +231,13 @@ func (check *Checker) blockBranches(all *Scope, parent *block, lstmt *ast.Labele
 		case *ast.BlockStmt:
 			blockBranches(lstmt, s.List)
 
-		case *ast.IfStmt:
-			stmtBranches(s.Body)
-			if s.Else != nil {
-				stmtBranches(s.Else)
+		case *ast.ExprStmt:
+			switch x := s.X.(type) {
+			case *ast.IfStmt:
+				stmtBranches(x.Body)
+				if x.Else != nil {
+					stmtBranches(x.Else)
+				}
 			}
 
 		case *ast.CaseClause:

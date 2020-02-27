@@ -84,7 +84,6 @@ func (d *deadState) findLabels(stmt ast.Stmt) {
 		*ast.DeclStmt,
 		*ast.DeferStmt,
 		*ast.EmptyStmt,
-		*ast.ExprStmt,
 		*ast.GoStmt,
 		*ast.IncDecStmt,
 		*ast.ReturnStmt,
@@ -113,10 +112,13 @@ func (d *deadState) findLabels(stmt ast.Stmt) {
 			}
 		}
 
-	case *ast.IfStmt:
-		d.findLabels(x.Body)
-		if x.Else != nil {
-			d.findLabels(x.Else)
+	case *ast.ExprStmt:
+		switch e := x.X.(type) {
+		case *ast.IfStmt:
+			d.findLabels(e.Body)
+			if e.Else != nil {
+				d.findLabels(e.Else)
+			}
 		}
 
 	case *ast.LabeledStmt:
@@ -228,10 +230,22 @@ func (d *deadState) findDead(stmt ast.Stmt) {
 		}
 
 	case *ast.ExprStmt:
-		// Call to panic?
-		call, ok := x.X.(*ast.CallExpr)
-		if ok {
-			name, ok := call.Fun.(*ast.Ident)
+		switch e := x.X.(type) {
+		case *ast.IfStmt:
+			d.findDead(e.Body)
+			if e.Else != nil {
+				r := d.reachable
+				d.reachable = true
+				d.findDead(e.Else)
+				d.reachable = d.reachable || r
+			} else {
+				// might not have executed if statement
+				d.reachable = true
+			}
+
+		case *ast.CallExpr:
+			// Call to panic?
+			name, ok := e.Fun.(*ast.Ident)
 			if ok && name.Name == "panic" && name.Obj == nil {
 				d.reachable = false
 			}
@@ -240,18 +254,6 @@ func (d *deadState) findDead(stmt ast.Stmt) {
 	case *ast.ForStmt:
 		d.findDead(x.Body)
 		d.reachable = x.Cond != nil || d.hasBreak[x]
-
-	case *ast.IfStmt:
-		d.findDead(x.Body)
-		if x.Else != nil {
-			r := d.reachable
-			d.reachable = true
-			d.findDead(x.Else)
-			d.reachable = d.reachable || r
-		} else {
-			// might not have executed if statement
-			d.reachable = true
-		}
 
 	case *ast.LabeledStmt:
 		d.findDead(x.Stmt)

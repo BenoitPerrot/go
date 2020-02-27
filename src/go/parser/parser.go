@@ -1167,6 +1167,9 @@ func (p *parser) parseOperand(lhs bool) ast.Expr {
 
 	case token.FUNC:
 		return p.parseFuncTypeOrLit()
+
+	case token.IF:
+		return p.parseIfStmt()
 	}
 
 	if typ := p.tryIdentOrType(); typ != nil {
@@ -1396,6 +1399,7 @@ func (p *parser) checkExpr(x ast.Expr) ast.Expr {
 	case *ast.StarExpr:
 	case *ast.UnaryExpr:
 	case *ast.BinaryExpr:
+	case *ast.IfStmt:
 	default:
 		// all other nodes are not proper expressions
 		p.errorExpected(x.Pos(), "expression")
@@ -1915,7 +1919,7 @@ func (p *parser) parseIfStmt() *ast.IfStmt {
 		p.next()
 		switch p.tok {
 		case token.IF:
-			else_ = p.parseIfStmt()
+			else_ = &ast.ExprStmt{X: p.parseIfStmt()}
 		case token.LBRACE:
 			else_ = p.parseBlockStmt()
 			p.expectSemi()
@@ -2245,7 +2249,7 @@ func (p *parser) parseStmt() (s ast.Stmt) {
 		s = p.parseBlockStmt()
 		p.expectSemi()
 	case token.IF:
-		s = p.parseIfStmt()
+		s = &ast.ExprStmt{X: p.parseIfStmt()}
 	case token.SWITCH:
 		s = p.parseSwitchStmt()
 	case token.SELECT:

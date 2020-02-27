@@ -147,9 +147,9 @@ func (check *Checker) multipleDefaults(list []ast.Stmt) {
 	}
 }
 
-func (check *Checker) openScope(s ast.Stmt, comment string) {
-	scope := NewScope(check.scope, s.Pos(), s.End(), comment)
-	check.recordScope(s, scope)
+func (check *Checker) openScope(node ast.Node, comment string) {
+	scope := NewScope(check.scope, node.Pos(), node.End(), comment)
+	check.recordScope(node, scope)
 	check.scope = scope
 }
 
@@ -318,24 +318,30 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 		check.stmt(ctxt, s.Stmt)
 
 	case *ast.ExprStmt:
-		// spec: "With the exception of specific built-in functions,
-		// function and method calls and receive operations can appear
-		// in statement context. Such statements may be parenthesized."
-		var x operand
-		kind := check.rawExpr(&x, s.X, nil)
-		var msg string
-		switch x.mode {
+		switch e := s.X.(type) {
+		case *ast.IfStmt:
+			check.ifStmt(ctxt, e, nil)
+
 		default:
-			if kind == statement {
-				return
+			// spec: "With the exception of specific built-in functions,
+			// function and method calls and receive operations can appear
+			// in statement context. Such statements may be parenthesized."
+			var x operand
+			kind := check.rawExpr(&x, s.X, nil)
+			var msg string
+			switch x.mode {
+			default:
+				if kind == statement {
+					return
+				}
+				msg = "is not used"
+			case builtin:
+				msg = "must be called"
+			case typexpr:
+				msg = "is not an expression"
 			}
-			msg = "is not used"
-		case builtin:
-			msg = "must be called"
-		case typexpr:
-			msg = "is not an expression"
+			check.errorf(x.pos(), "%s %s", &x, msg)
 		}
-		check.errorf(x.pos(), "%s %s", &x, msg)
 
 	case *ast.SendStmt:
 		var ch, x operand
@@ -482,28 +488,6 @@ func (check *Checker) stmt(ctxt stmtContext, s ast.Stmt) {
 		defer check.closeScope()
 
 		check.stmtList(inner, s.List)
-
-	case *ast.IfStmt:
-		check.openScope(s, "if")
-		defer check.closeScope()
-
-		check.simpleStmt(s.Init)
-		var x operand
-		check.expr(&x, s.Cond)
-		if x.mode != invalid && !isBoolean(x.typ) {
-			check.error(s.Cond.Pos(), "non-boolean condition in if statement")
-		}
-		check.stmt(inner, s.Body)
-		// The parser produces a correct AST but if it was modified
-		// elsewhere the else branch may be invalid. Check again.
-		switch s.Else.(type) {
-		case nil, *ast.BadStmt:
-			// valid or error already reported
-		case *ast.IfStmt, *ast.BlockStmt:
-			check.stmt(inner, s.Else)
-		default:
-			check.error(s.Else.Pos(), "invalid else branch in if statement")
-		}
 
 	case *ast.SwitchStmt:
 		inner |= breakOk

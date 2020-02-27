@@ -966,6 +966,25 @@ func (p *printer) expr1(expr ast.Expr, prec1, depth int) {
 		p.print(blank)
 		p.expr(x.Value)
 
+	case *ast.IfStmt:
+		p.print(token.IF)
+		p.controlClause(false, x.Init, x.Cond, nil)
+		p.block(x.Body, 1)
+		if x.Else != nil {
+			p.print(blank, token.ELSE, blank)
+			switch x.Else.(type) {
+			case *ast.BlockStmt:
+				p.stmt(x.Else, false)
+			default:
+				// This can only happen with an incorrectly
+				// constructed AST. Permit it but print so
+				// that it can be parsed without errors.
+				p.print(token.LBRACE, indent, formfeed)
+				p.stmt(x.Else, true)
+				p.print(unindent, formfeed, token.RBRACE)
+			}
+		}
+
 	default:
 		panic("unreachable")
 	}
@@ -1258,25 +1277,6 @@ func (p *printer) stmt(stmt ast.Stmt, nextIsRBrace bool) {
 
 	case *ast.BlockStmt:
 		p.block(s, 1)
-
-	case *ast.IfStmt:
-		p.print(token.IF)
-		p.controlClause(false, s.Init, s.Cond, nil)
-		p.block(s.Body, 1)
-		if s.Else != nil {
-			p.print(blank, token.ELSE, blank)
-			switch s.Else.(type) {
-			case *ast.BlockStmt, *ast.IfStmt:
-				p.stmt(s.Else, nextIsRBrace)
-			default:
-				// This can only happen with an incorrectly
-				// constructed AST. Permit it but print so
-				// that it can be parsed without errors.
-				p.print(token.LBRACE, indent, formfeed)
-				p.stmt(s.Else, true)
-				p.print(unindent, formfeed, token.RBRACE)
-			}
-		}
 
 	case *ast.CaseClause:
 		if s.List != nil {

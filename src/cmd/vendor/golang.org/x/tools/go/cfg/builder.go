@@ -40,9 +40,36 @@ start:
 
 	case *ast.ExprStmt:
 		b.add(s)
-		if call, ok := s.X.(*ast.CallExpr); ok && !b.mayReturn(call) {
-			// Calls to panic, os.Exit, etc, never return.
-			b.current = b.newBlock("unreachable.call")
+		switch e := s.X.(type) {
+		case *ast.CallExpr:
+			if !b.mayReturn(e) {
+				// Calls to panic, os.Exit, etc, never return.
+				b.current = b.newBlock("unreachable.call")
+			}
+
+		case *ast.IfStmt:
+			if e.Init != nil {
+				b.stmt(e.Init)
+			}
+			then := b.newBlock("if.then")
+			done := b.newBlock("if.done")
+			_else := done
+			if e.Else != nil {
+				_else = b.newBlock("if.else")
+			}
+			b.add(e.Cond)
+			b.ifelse(then, _else)
+			b.current = then
+			b.stmt(e.Body)
+			b.jump(done)
+
+			if e.Else != nil {
+				b.current = _else
+				b.stmt(e.Else)
+				b.jump(done)
+			}
+
+			b.current = done
 		}
 
 	case *ast.DeclStmt:
@@ -72,30 +99,6 @@ start:
 
 	case *ast.BlockStmt:
 		b.stmtList(s.List)
-
-	case *ast.IfStmt:
-		if s.Init != nil {
-			b.stmt(s.Init)
-		}
-		then := b.newBlock("if.then")
-		done := b.newBlock("if.done")
-		_else := done
-		if s.Else != nil {
-			_else = b.newBlock("if.else")
-		}
-		b.add(s.Cond)
-		b.ifelse(then, _else)
-		b.current = then
-		b.stmt(s.Body)
-		b.jump(done)
-
-		if s.Else != nil {
-			b.current = _else
-			b.stmt(s.Else)
-			b.jump(done)
-		}
-
-		b.current = done
 
 	case *ast.SwitchStmt:
 		b.switchStmt(s, label)

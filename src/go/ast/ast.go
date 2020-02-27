@@ -513,6 +513,8 @@ func (*InterfaceType) exprNode() {}
 func (*MapType) exprNode()       {}
 func (*ChanType) exprNode()      {}
 
+func (*IfStmt) exprNode() {}
+
 // ----------------------------------------------------------------------------
 // Convenience functions for Idents
 
@@ -806,7 +808,6 @@ func (*DeferStmt) stmtNode()      {}
 func (*ReturnStmt) stmtNode()     {}
 func (*BranchStmt) stmtNode()     {}
 func (*BlockStmt) stmtNode()      {}
-func (*IfStmt) stmtNode()         {}
 func (*CaseClause) stmtNode()     {}
 func (*SwitchStmt) stmtNode()     {}
 func (*TypeSwitchStmt) stmtNode() {}
